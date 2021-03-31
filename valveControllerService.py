@@ -24,6 +24,8 @@ def setupRasbperry():
 
 
 def checkWateringStatus():
+    i = int 
+    i = 0
     print("checkWateringStatus")
     conn=getConnection()
     conn.row_factory=sqlite3.Row
@@ -36,8 +38,8 @@ def checkWateringStatus():
         print("zone_id",row["zone_id"])
         print("status",row["status"])
 
-        date_from=datetime.strptime(str(row["date_from"]),'%Y-%m-%d %H:%M:%S')
-        date_to=datetime.strptime(str(row["date_to"]),'%Y-%m-%d %H:%M:%S')
+        date_from=datetime.strptime(str(row["date_from"] + ':00'),'%Y-%m-%d %H:%M:%S')
+        date_to=datetime.strptime(str(row["date_to"]+':00'),'%Y-%m-%d %H:%M:%S')
         print(f'date_from formatted: {date_from} date_to formatted: {date_to} ')
 
         #compare the date from database with the system date
@@ -51,36 +53,25 @@ def checkWateringStatus():
 
         print(f'current_date tstamp: {now.timestamp()},  date_from tstamp {date_from.timestamp()}, date_to tstamp: {date_to.timestamp()}')
 
-        if(str(row['status'])=='pending' and now.timestamp()>=date_from.timestamp()):
+        if(now.timestamp()>date_from.timestamp() and now.timestamp()<date_to.timestamp()):
             print("starting watering")
             print("zone: ", row["zone_id"])
             print("starting on: ",current_time_formatted)
-            updateWatering(conn,"started",row["watering_id"])
-
             print(f"Open Relay Port {int(row['relay_port'])}")
-            #GPIO.output(relayin1,False)
-            #GPIO.output(relayin2,False)
-
-            #Uncomment when deploying in Raspberry
-            GPIO.output(int(row['relay_port']),False)
-
-        elif(str(row['status'])=='started' and now.timestamp()>=date_to.timestamp()):
+            if (i==0):
+                GPIO.output(int(row['relay_port']),False)
+            print("=======BLOQUE 1=======================")
+            i = i +1
+        if(now.timestamp()>=date_to.timestamp()):
+            i=0
             print("finish watering")
             print("zone: ", row["zone_id"])
             print("finshed on: ",current_time_formatted)
             updateWatering(conn,"completed",row["watering_id"])
-            #GPIO.output(relayin1,True)
-            #GPIO.output(relayin2,True)
             print(f"Close Relay Port {int(row['relay_port'])}")
-
-            #Uncomment when deploying in Raspberry
-            GPIO.output(int(row['relay_port']),True)
-
-        else:
-            print(f"Close in case is open Relay Port {int(row['relay_port'])}")
-            GPIO.output(int(row['relay_port']),True)
-            #GPIO.output(relayin2,True)
-
+            GPIO.output(int(row['relay_port']), True)
+            print("==========BLOQUE 2===================")
+        
     if(conn):
         conn.close()
 
@@ -90,39 +81,12 @@ def updateWatering(conn,status,watering_id):
     params=(status,watering_id)
     try:
         with conn:
-            #conn.execute(f"UPDATE watering_schedule set status='{status}' WHERE watering_id={watering_id}")
             conn.execute("UPDATE watering_schedule set status=? WHERE watering_id=?",params)
             conn.commit()
     except sqlite3.IntegrityError as error:
         print("couldn't update data")
         print(error)
-    # finally:
-    #     if(conn):
-    #         conn.close()
-    #         print("close connection ")
 
-
-def createTestData():
-    #[('2020-11-21 22:54:46', '2020-11-21 22:54:46', 1, 5, 'pending')]
-    watering_schedule=[('2020-11-21 22:54:46', '2020-11-21 22:54:46', 5, 'pending'),('2020-11-21 22:54:46', '2020-11-21 22:54:46', 5, 'pending'),('2020-11-21 22:54:46', '2020-11-21 22:54:46', 5, 'pending')]
-
-    conn=getConnection()
-    c=conn.cursor()
-
-    c.executemany("INSERT INTO watering_schedule(date_from,date_to,zone_id,status) VALUES(?,?,?,?)",watering_schedule)
-    conn.commit()
-    print(c.rowcount)
-
-def createTestDataWithContextManager():
-    watering_schedule=[('2020-11-21 22:54:46', '2020-11-21 22:54:46', 5, 'pending'),('2020-11-21 22:54:46', '2020-11-21 22:54:46', 5, 'pending'),('2020-11-21 22:54:46', '2020-11-21 22:54:46', 5, 'pending')]
-
-    conn=getConnection()
-    try:
-        with conn:
-            conn.executemany("INSERT INTO watering_schedule(date_from,date_to,zone_id,status) VALUES(?,?,?,?)",watering_schedule)
-
-    except sqlite3.IntegrityError:
-        print("Couldn't add the data")
 
 def insertWatering(date_from,date_to,zone_id,status):
     watering_schedule=[(date_from,date_to,zone_id,status)]
@@ -138,11 +102,7 @@ def testConnection():
     print("library ",sqlite3.version)
     print("runtime ",sqlite3.sqlite_version)
     conn=sqlite3.connect('/home/pi/openwatering.db')
-    #conn=sqlite3.connect('C://repo//openwatering.db')
-
-
     status=('pending',)
-
     c=conn.cursor()
     c.execute('SELECT * FROM watering_schedule WHERE status=?',status)
 
@@ -153,7 +113,6 @@ def getConnection():
     conn=None
     try:
         conn=sqlite3.connect('/home/pi/openwatering.db')
-        #conn=sqlite3.connect('C://repo//openwatering.db')
     except Error as e:
         print("Couldn't get connection ")
         print(e)
@@ -164,7 +123,5 @@ if __name__ == "__main__":
     while (True):
         setupRasbperry()
         testConnection()
-        # createTestData()
-        # createTestDataWithContextManager()
         checkWateringStatus()
-        time.sleep(60)
+        time.sleep(10)
